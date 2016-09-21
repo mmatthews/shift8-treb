@@ -10,6 +10,10 @@
 
 Wordpress plugin that easily integrates and imports your TREB (Toronto Real Estate Board) data.
 
+# Important Notice
+
+This plugin is still under very active development. It is not considered stable by any means. Feel free to watch and/or reach out directly to get more information.
+
 ## Description 
 
 This is a small plugin that allows you to import your TREB listing data into Wordpress easily and seamlessly. Most importantly, this plugin requires no 3rd party service and no monthly service fee. The plugin assumes you already have taken the necessary steps to gain access from TREB for FTP and Web access to the data. You must have a TREB Agent ID, TREB Username and TREB password to use this plugin. 
