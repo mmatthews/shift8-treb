@@ -4,7 +4,7 @@
 * Tags: treb, toronto real estate board, toronto real estate, wordpress, treb wordpress, wp, toronto wordpress
 * Requires at least: 3.0.1
 * Tested up to: 4.5.2
-* Stable tag: 1.0
+* Stable tag: 0.5
 * License: GPLv3
 * License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -54,7 +54,7 @@ You can visit [our website](https://www.shift8web.ca "Toronto Web Design") to se
 
 ## Changelog 
 
-### 1.0 
+### 0.5
 * Stable version created
 * Implemented queuing system
 
