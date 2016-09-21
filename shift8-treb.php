@@ -152,30 +152,23 @@ function treb_get_csv() {
 
 add_action( 'init', 'process_handler' );
 function process_handler() {
+	$treb_images = new StdClass;
+	$treb_post = new StdClass;
 	$treb_images->treb_image_process = new Treb_Image_Process();
+	$treb_post->treb_post_process = new Treb_Post_Process();
+
         if ( 'treb_images' === $_GET['process'] ) {
-                $treb_images = treb_get_csv();
+                $treb_data = treb_get_csv();
 
 	        foreach ($treb_data as $item) {
-			// Queue the first image
+			// Queue the listing post creation
+			$treb_post->treb_post_process->push_to_queue($item);
+
+			// Queue the images 
 			$treb_images->treb_image_process->push_to_queue($item);
-			// Queue images 2 - 9 separately
-			for ($i = 2;$i < 9;$i++) {
-				$treb_images->treb_image_process->push_to_queue($item, '_'.$i);
-			}
-	                // Create post
-	                /*$treb_post = array(
-	                  'post_title'    => wp_strip_all_tags( 'TREB Listing : ' . $streetnumber . ' ' . $streetname . ' ' . $mlstnumber ),
-	                  'post_content'  => $description,
-	                  'post_status'   => 'publish',
-	                  'post_author'   => 1,
-	                  'tax_input'     => array(
-	                                        'post_tag' => $mlsnumber,
-	                                        ),
-	                );
-			wp_insert_post( $treb_post ); */
-		
+
 		}
+		$treb_post->treb_post_process->save()->dispatch();
 		$treb_images->treb_image_process->save()->dispatch();
         }
 }
@@ -223,7 +216,7 @@ class Treb_Image_Process extends WP_Background_Process {
 
 	protected $action = 'treb_image_process';
 
-	protected function task( $item, $img_num = null ) {
+	protected function task( $item ) {
 		// Actions to perform
 	        $ftp_server = "3pv.torontomls.net";
 	        $ftp_user = esc_attr( get_option('s8_treb_user') ) . '%40photos';
@@ -260,14 +253,22 @@ class Treb_Image_Process extends WP_Background_Process {
 		}
 
 		$mlsimage = substr($mlsnumber, -3);
+		$local_file = $upload_dir . '/' . $mlsnumber;
 
-		treb_get_images('ftp://' . $ftp_user . ':' . $ftp_pass . '@3pv.torontomls.net/mlsmultiphotos/1/' . $mlsimage . '/' . $mlsnumber . $img_num . '.jpg', $ftp_user, $ftp_pass, $upload_dir . '/' . $mlsnumber . '.jpg');
-		error_log('ftp://' . $ftp_user . ':' . $ftp_pass . '@3pv.torontomls.net/mlsmultiphotos/1/' . $mlsimage . '/' . $mlsnumber . $img_num . '.jpg');
-		error_log($ftp_user);
-		error_log($ftp_pass);
-		error_log($upload_dir . '/' . $mlsnumber . '.jpg');
-		error_log('image got for ' . $mlsimage);
-
+		for ($i = 1;$i < 10;$i++) {
+			if ($i == 1) {
+				$local_image  = $local_file . '.jpg';
+				$remote_image = $mlsnumber . '.jpg';
+			} else {
+				$local_image = $local_file . '_' . $i . '.jpg';
+				$remote_image = $mlsnumber . '_' . $i . '.jpg';
+			}
+			if (!file_exists($local_image) && filesize($local_image) < 100) {
+				treb_get_images('ftp://' . $ftp_user . ':' . $ftp_pass . '@3pv.torontomls.net/mlsmultiphotos/1/' . $mlsimage . '/' . $remote_image, $ftp_user, $ftp_pass, $local_image);
+			} else { 
+				error_log('skipping, file exists : ' . $local_image);
+			}
+		}
 		return false;
 	}
 
@@ -278,3 +279,54 @@ class Treb_Image_Process extends WP_Background_Process {
 	}
 
 }
+
+class Treb_Post_Process extends WP_Background_Process {
+
+        protected $action = 'treb_post_process';
+
+        protected function task( $item ) {
+                $description = $item[2];
+                $streetname = $item[273];
+                $streetnumber = $item[275];
+                $streetsuffix = $item[276];
+                $address = $item[3];
+                $postalcode = $item[330];
+                $bathrooms = $item[10];
+                $bedrooms = $item[15];
+                $bedplus = $item[16];
+                $houseclass = $item[29];
+                $extras = $item[69];
+                $listagent = $item[111];
+                $listprice = $item[120];
+                $mlsnumber = $item[130];
+                $squarefoot = $item[269];
+                $virtualtour = $item[292];
+                $pictures = $item[174];
+                $inputdate = $item[174];
+                $lastupdate = $item[123];
+                $solddate = $item[24];
+                $agentid = $item[333];
+
+		// Create post
+		$treb_post = array(
+			'post_title'    => wp_strip_all_tags( 'TREB Listing : ' . $streetnumber . ' ' . $streetname . ' ' . $mlstnumber ),
+			'post_content'  => $description,
+			'post_status'   => 'publish',
+			'post_author'   => 1,
+			'tax_input'     => array(
+			'post_tag' => $mlsnumber,
+			),
+		);
+		error_log('posting for : ' . $mlsnumber);
+		wp_insert_post( $treb_post ); 
+
+		return false;
+	}
+
+        protected function complete() {
+                parent::complete();
+
+                // Show notice to user or perform some other arbitrary task...
+        }
+}
+
