@@ -55,6 +55,6 @@ You can visit [our website](https://www.shift8web.ca "Toronto Web Design") to se
 ## Changelog 
 
 ### 0.5
-* Stable version created
+* Beta version created
 * Implemented queuing system
 
