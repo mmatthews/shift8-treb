@@ -48,7 +48,21 @@ function register_shift8_treb_settings() {
 	register_setting( 'shift8-treb-settings-group', 's8_treb_pass' );
 	register_setting( 'shift8-treb-settings-group', 's8_treb_minlist' );
 	register_setting( 'shift8-treb-settings-group', 's8_treb_agent_exclude' );
+	// Import progress option
+	add_option( 'shift8-treb-import-progress', '0', '', 'yes');
 }
+
+// Register admin scripts 
+function load_shift8_treb_wp_admin_style() {
+	wp_enqueue_script('jquery-ui-datepicker');
+	wp_enqueue_script('jquery-ui-button');
+	wp_enqueue_script('jquery-ui-progressbar');
+        // admin always last
+        wp_enqueue_style( 'shift8_treb_css', plugin_dir_url( __FILE__ ) . 'css/shift8_treb_admin.css' );
+        wp_enqueue_media();
+        wp_enqueue_script( 'shift8_treb_script', plugin_dir_url( __FILE__ ) . 'js/shift8_treb_admin.js' );
+}
+add_action( 'admin_enqueue_scripts', 'load_shift8_treb_wp_admin_style' );
 
 // Admin welcome page
 if (!function_exists('shift8_main_page')) {
@@ -107,22 +121,30 @@ function shift8_treb_settings_page() {
 	submit_button(); 
 	?>
 	</form>
-	<form method="post" action="">
-	<input type="hidden" value="true" name="test_button" />
-	<?php
-//	wp_nonce_field('test_button_clicked');
-//	submit_button('Import TREB Data', 'secondary', 'test_button');
-	?>
-	</form>
-	<button onclick="location.href='<?php echo wp_nonce_url( admin_url( 'admin.php?page=shift8-treb%2Fshift8-treb.php%2Fcustom&process=treb_images'), 'process' ); ?>'">Import TREB Images</button>
+	<hr>
+	<p>Choose a date to import data : <input type="text" id="datepicker-treb"></p>
+	<a id="treb-import-button" href="<?php echo wp_nonce_url( admin_url( 'admin.php?page=shift8-treb%2Fshift8-treb.php%2Fcustom&process=treb_images'), 'process' ); ?>">Import TREB Images</a>
+	<div class="treb-import-container">
+	<div class="treb-import-progress"></div>
+	</div>
 </div>
 <?php 
 }
 
-function treb_get_csv() {
-        $the_day = "13";
-        $the_mon = "09";
-        $the_yr = "2016";
+add_action( 'wp_ajax_treb_import_progress', 'treb_import_progress_callback' );
+function treb_import_progress_callback() {
+	global $wpdb; // this is how you get access to the database
+	$progress = intval(get_option('shift8-treb-import-progress'));
+	error_log('the progress!!! : ' . $progress);
+        echo $progress;
+	wp_die(); // this is required to terminate immediately and return a proper response
+}
+
+
+function treb_get_csv($date, $avail) {
+        $the_day = $date[0];
+        $the_mon = $date[1];
+        $the_yr = $date[2];
         $avail_opt = "avail";
         $s8_treb_user = esc_attr( get_option('s8_treb_user') );
         $s8_treb_pass = esc_attr( get_option('s8_treb_pass') );
@@ -152,34 +174,37 @@ function treb_get_csv() {
 
 add_action( 'init', 'process_handler' );
 function process_handler() {
-	$treb_images = new StdClass;
-	$treb_post = new StdClass;
-	$treb_images->treb_image_process = new Treb_Image_Process();
-	$treb_post->treb_post_process = new Treb_Post_Process();
+	$treb_import = new StdClass;
+	$treb_import->treb_import_process = new Treb_Import_Process();
 
         if ( 'treb_images' === $_GET['process'] ) {
-                $treb_data = treb_get_csv();
-
+		// Parse date , otherwise assign current date
+		if ($_GET['date']) {
+			$date = explode("-", $_GET['date']);
+		} else {
+			$date = explode("-", date('d-m-Y'));
+		}
+                $treb_data = treb_get_csv($date);
+		$loop_count = 0;
 	        foreach ($treb_data as $item) {
-			// Queue the listing post creation
-			$treb_post->treb_post_process->push_to_queue($item);
-
-			// Queue the images 
-			$treb_images->treb_image_process->push_to_queue($item);
+			$loop_count++;
+			// Prep multidimensional array
+			$item_array = array( 
+					count($treb_data), 
+					$item,
+					$loop_count
+					);
+			// Queue the import
+			$treb_import->treb_import_process->push_to_queue($item_array);
 
 		}
-		$treb_post->treb_post_process->save()->dispatch();
-		$treb_images->treb_image_process->save()->dispatch();
+		$treb_import->treb_import_process->save()->dispatch();
         }
 }
 
 function treb_get_images($remote_url, $remote_user, $remote_pass, $local_file) {
-	ignore_user_abort(true);
-	set_time_limit(0);
-	error_log('remote url : ' . $remote_url);
-	error_log('remote user : ' . $remote_user);
-	error_log('remote pass : ' . $remote_pass);
-	error_log('local file : ' . $local_file);
+//	ignore_user_abort(true);
+//	set_time_limit(0);
 	try {
 		$ch = curl_init();
 		$fp = fopen($local_file, 'w');
@@ -212,9 +237,9 @@ function treb_get_images($remote_url, $remote_user, $remote_pass, $local_file) {
 }
 
 
-class Treb_Image_Process extends WP_Background_Process {
+class Treb_Import_Process extends WP_Background_Process {
 
-	protected $action = 'treb_image_process';
+	protected $action = 'treb_import_process';
 
 	protected function task( $item ) {
 		// Actions to perform
@@ -222,27 +247,28 @@ class Treb_Image_Process extends WP_Background_Process {
 	        $ftp_user = esc_attr( get_option('s8_treb_user') ) . '%40photos';
 	        $ftp_pass = esc_attr( get_option('s8_treb_pass') );
 
-		$description = $item[2];
-		$streetname = $item[273];
-		$streetnumber = $item[275];
-		$streetsuffix = $item[276];
-		$address = $item[3];
-		$postalcode = $item[330];
-		$bathrooms = $item[10];
-		$bedrooms = $item[15];
-		$bedplus = $item[16];
-		$houseclass = $item[29];
-		$extras = $item[69];
-		$listagent = $item[111];
-		$listprice = $item[120];
-		$mlsnumber = $item[130];
-		$squarefoot = $item[269];
-		$virtualtour = $item[292];
-		$pictures = $item[174];
-		$inputdate = $item[174];
-		$lastupdate = $item[123];
-		$solddate = $item[24];
-		$agentid = $item[333]; 
+
+		$description = $item[1][2];
+		$streetname = $item[1][273];
+		$streetnumber = $item[1][275];
+		$streetsuffix = $item[1][276];
+		$address = $item[1][3];
+		$postalcode = $item[1][330];
+		$bathrooms = $item[1][10];
+		$bedrooms = $item[1][15];
+		$bedplus = $item[1][16];
+		$houseclass = $item[1][29];
+		$extras = $item[1][69];
+		$listagent = $item[1][111];
+		$listprice = $item[1][120];
+		$mlsnumber = $item[1][130];
+		$squarefoot = $item[1][269];
+		$virtualtour = $item[1][292];
+		$pictures = $item[1][174];
+		$inputdate = $item[1][174];
+		$lastupdate = $item[1][123];
+		$solddate = $item[1][24];
+		$agentid = $item[1][333]; 
 	
 		// FTP get images
 		$upload = wp_upload_dir();
@@ -255,78 +281,47 @@ class Treb_Image_Process extends WP_Background_Process {
 		$mlsimage = substr($mlsnumber, -3);
 		$local_file = $upload_dir . '/' . $mlsnumber;
 
-		for ($i = 1;$i < 10;$i++) {
-			if ($i == 1) {
-				$local_image  = $local_file . '.jpg';
-				$remote_image = $mlsnumber . '.jpg';
-			} else {
-				$local_image = $local_file . '_' . $i . '.jpg';
-				$remote_image = $mlsnumber . '_' . $i . '.jpg';
+		if ($mlsnumber) {
+			for ($i = 1;$i < 10;$i++) {
+				if ($i == 1) {
+					$local_image  = $local_file . '.jpg';
+					$remote_image = $mlsnumber . '.jpg';
+				} else {
+					$local_image = $local_file . '_' . $i . '.jpg';
+					$remote_image = $mlsnumber . '_' . $i . '.jpg';
+				}
+				if (!file_exists($local_image) && @filesize($local_image) < 100) {
+					treb_get_images('ftp://' . $ftp_user . ':' . $ftp_pass . '@3pv.torontomls.net/mlsmultiphotos/' . $i . '/' . $mlsimage . '/' . $remote_image, $ftp_user, $ftp_pass, $local_image);
+				} else { 
+					error_log('skipping, file exists : ' . $local_image);
+				}
 			}
-			if (!file_exists($local_image) && filesize($local_image) < 100) {
-				treb_get_images('ftp://' . $ftp_user . ':' . $ftp_pass . '@3pv.torontomls.net/mlsmultiphotos/' . $i . '/' . $mlsimage . '/' . $remote_image, $ftp_user, $ftp_pass, $local_image);
-			} else { 
-				error_log('skipping, file exists : ' . $local_image);
-			}
+
+	                // Create post
+	                $treb_post = array(
+	                        'post_title'    => wp_strip_all_tags( 'TREB Listing : ' . $streetnumber . ' ' . $streetname . ' ' . $mlstnumber ),
+	                        'post_content'  => $description,
+	                        'post_status'   => 'publish',
+	                        'post_author'   => 1,
+	                        'tax_input'     => array(
+	                        'post_tag' => $mlsnumber,
+	                        ),
+	                );
+	                error_log('posting for : ' . $mlsnumber);
+	                wp_insert_post( $treb_post ); 
+
+
 		}
+		$progress_total = $item[0];
+		$progress_current = $item[2];
+		$progress_percentage = $progress_current / $progress_total * 100;
+		error_log('progress percentage : ' . $progress_percentage);
+		update_option('shift8-treb-import-progress', $progress_percentage);
 		return false;
 	}
 
 	protected function complete() {
 		parent::complete();
-
-		// Show notice to user or perform some other arbitrary task...
 	}
 
 }
-
-class Treb_Post_Process extends WP_Background_Process {
-
-        protected $action = 'treb_post_process';
-
-        protected function task( $item ) {
-                $description = $item[2];
-                $streetname = $item[273];
-                $streetnumber = $item[275];
-                $streetsuffix = $item[276];
-                $address = $item[3];
-                $postalcode = $item[330];
-                $bathrooms = $item[10];
-                $bedrooms = $item[15];
-                $bedplus = $item[16];
-                $houseclass = $item[29];
-                $extras = $item[69];
-                $listagent = $item[111];
-                $listprice = $item[120];
-                $mlsnumber = $item[130];
-                $squarefoot = $item[269];
-                $virtualtour = $item[292];
-                $pictures = $item[174];
-                $inputdate = $item[174];
-                $lastupdate = $item[123];
-                $solddate = $item[24];
-                $agentid = $item[333];
-
-		// Create post
-		$treb_post = array(
-			'post_title'    => wp_strip_all_tags( 'TREB Listing : ' . $streetnumber . ' ' . $streetname . ' ' . $mlstnumber ),
-			'post_content'  => $description,
-			'post_status'   => 'publish',
-			'post_author'   => 1,
-			'tax_input'     => array(
-			'post_tag' => $mlsnumber,
-			),
-		);
-		error_log('posting for : ' . $mlsnumber);
-		wp_insert_post( $treb_post ); 
-
-		return false;
-	}
-
-        protected function complete() {
-                parent::complete();
-
-                // Show notice to user or perform some other arbitrary task...
-        }
-}
-
