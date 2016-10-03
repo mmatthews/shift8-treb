@@ -1,4 +1,4 @@
-# Shift8 Treb Wordpress
+# Shift8 Treb IDX Wordpress Plugin
 * Contributors: shift8
 * Donate link: https://www.shift8web.ca
 * Tags: treb, toronto real estate board, toronto real estate, wordpress, treb wordpress, wp, toronto wordpress

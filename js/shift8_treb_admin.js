@@ -26,6 +26,7 @@ jQuery(document).ready(function() {
 				jQuery(".treb-import-progress").progressbar({
 					value: parseInt(response)
 				});
+				console.log('value : ' + response);
 				setTimeout( trebPoll, 2000 );
 			});
 		}
