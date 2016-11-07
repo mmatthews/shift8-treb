@@ -291,7 +291,7 @@ class Treb_Import_Process extends WP_Background_Process {
 					$remote_image = $mlsnumber . '_' . $i . '.jpg';
 				}
 				if (!file_exists($local_image) && @filesize($local_image) < 100) {
-					treb_get_images('ftp://' . $ftp_user . ':' . $ftp_pass . '@3pv.torontomls.net/mlsmultiphotos/' . $i . '/' . $mlsimage . '/' . $remote_image, $ftp_user, $ftp_pass, $local_image);
+					treb_get_images('ftp://' . $ftp_user . ':' . $ftp_pass . '@3pv.torontomls.net/mlsphotos/' . $i . '/' . $mlsimage . '/' . $remote_image, $ftp_user, $ftp_pass, $local_image);
 				} else { 
 					error_log('skipping, file exists : ' . $local_image);
 				}

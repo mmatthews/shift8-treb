@@ -2,3 +2,4 @@ push.sh
 wp-deploy/*
 svn/*
 push.exclude
+clearcron.sh
